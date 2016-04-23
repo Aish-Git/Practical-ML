@@ -1,0 +1,66 @@
+---
+title: "Activity Prediction Modelr"
+author: "Aish Varadhan"
+date: "April 21, 2016"
+output: html_document
+---
+
+#### 1. Load Libaries & Data
+##### Load required libraries for loading data and machine learning algorithm application
+```{r LoadDataSet, echo=TRUE}
+library(dplyr, quietly = TRUE, warn.conflicts = FALSE)
+library(ggplot2, quietly = TRUE, warn.conflicts = FALSE)
+library(reshape2, quietly = TRUE, warn.conflicts = FALSE)
+library(caret, quietly = TRUE, warn.conflicts = FALSE)
+library(rattle, quietly = TRUE, warn.conflicts = FALSE)
+library(randomForest, quietly = TRUE, warn.conflicts = FALSE)
+setwd("c:/Users/avarad/Documents/R/8-PML/")
+pml_train <- read.csv("pml-training.csv",header=TRUE)
+pml_test <- read.csv("pml-testing.csv",header=TRUE)
+pml_train <- tbl_df(pml_train)
+pml_test <- tbl_df(pml_test)
+```
+
+#### 2. Extract Relevant Predictors
+##### We look at the variables in the training data set and remove the first 7 that have nothing to do with the outcome, classe as these are usernames, row numbers, time stamps, etc. We also remove the classe variable from the list of predictors as this is the outcome we need to predict. We then only look at the variables that contain roll, pitch, yaw, gyroscopic, acceleration, magnetometer and total acceleration information and ignore all other summary variables such as min, max, avg, stddev, var, kurtosis and skewness as these are already captured in their entirety in their main variable measures. We then formulate a string that expresses the variable classe as a outcome of all these extracted predictors
+```{r Extract Relevant Predictors, echo=TRUE}
+all_predictors <- names(pml_train)[8:159]
+filtered_predictors <- grep("^(roll|pitch|yaw|gyros|accel|magnet|total)_",all_predictors,value = TRUE)
+ml_formula <- paste("classe ~ ", paste(filtered_predictors,collapse = " + "))
+```
+
+#### 3. Model Fitting & Cross Validation
+##### We then fit two models with cross-validation for the classe outcome as a function of all the above predictors. We use the CART (classification Trees) and Random Forest approach to fit two different models. We perform  cross validation using the trainControl() function and use the repeatedCv with 10 repetitions.
+```{r Fit Model, echo=TRUE}
+set.seed(786543)
+trc <- trainControl(method="repeatedcv",repeats = 10)
+ml_model_rpart <- train(eval(parse(text=ml_formula)),data = pml_train,method="rpart",trControl = trc)
+ml_model_rf <- randomForest::randomForest(eval(parse(text=ml_formula)),data = pml_train)
+```
+
+#### 4. Model Exploration, Accuracy and COnfusion Matrices
+##### We then explore some of the model attributes for both the models viz. prediction accuracy (by using the model on the training set), the confusion matrix and a out of sampel errors.
+```{r Model Attribute Exploration_rpart, echo=TRUE}
+ml_model_rpart$finalModel
+fancyRpartPlot(ml_model_rpart$finalModel,sub = "Activity Effectiveness Classification")
+pred_rpart <- predict(ml_model_rpart, newdata = pml_train)
+table(pred_rpart,pml_train$classe)
+qplot(pred_rpart,pml_train$classe,col=pml_train$classe) + geom_jitter()
+```
+
+```{r Model Attribute Exploration_rf, echo=TRUE}
+ml_model_rf$confusion
+pred_rf <- predict(ml_model_rf, newdata = pml_train)
+table(pred_rf,pml_train$classe)
+qplot(pred_rf,pml_train$classe,col=pml_train$classe) + geom_jitter()
+```
+
+
+#### 5. Test Set prediction
+##### Since the random forest model does better in terms of not over/under fitting, we use this model on the test set to predict the classe variable
+```{r Predictions, echo=TRUE}
+predict(ml_model_rf,newdata = pml_test)
+```
+
+#### 6. Summary
+##### We seleced the CART and RandomForests algorithms as both of these are better performing for categorical variables and non-linear functions. As we can see, the error from the RPART model is much higher than that of RF and hence we chose to use RF for the  test test prediction. 
